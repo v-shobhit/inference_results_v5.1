@@ -21,3 +21,5 @@ soundfile==0.13.0
 safetensors==0.5.2
 num2words==0.5.14
 sox==1.5.0
+
+orjson

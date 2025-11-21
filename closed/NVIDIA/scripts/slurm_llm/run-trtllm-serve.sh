@@ -277,7 +277,50 @@ echo "trtllm_server_urls: $endpoints"
 
 if [ "$run_client" = 1 ]; then
     # warmup and health check is disabled, hence wait for server
-    sleep 240
+    # Extract hostnames from endpoints and wait for port 30000 to be active on each
+    TIMEOUT=1200  # 20 minutes timeout
+    IFS=',' read -ra endpoint_array <<< "$endpoints"
+    pids=()
+    
+    for endpoint in "${endpoint_array[@]}"; do
+        hostname=$(echo "$endpoint" | cut -d':' -f1)
+        echo "Starting port check for $hostname:30000 (timeout: ${TIMEOUT}s)"
+        
+        # Run overlapping job step on each node to check for port 30000
+        srun --overlap --nodes=1 --nodelist="$hostname" --ntasks=1 \
+            bash -c "
+                TIMEOUT=$TIMEOUT
+                elapsed=0
+                while [ \$elapsed -lt \$TIMEOUT ]; do
+                    if netstat -tuln 2>/dev/null | grep -q ':30000 .*LISTEN' || \
+                       ss -tuln 2>/dev/null | grep -q ':30000 .*LISTEN'; then
+                        echo \"Port 30000 is active on \$(hostname) after \${elapsed}s\"
+                        exit 0
+                    fi
+                    sleep 2
+                    elapsed=\$((elapsed + 2))
+                done
+                echo \"ERROR: Timeout waiting for port 30000 on \$(hostname) after \${TIMEOUT}s\"
+                exit 1
+            " &
+        pids+=($!)
+    done
+    
+    # Wait for all port checks to complete and check for failures
+    echo "Waiting for port 30000 to be active on all nodes (timeout: ${TIMEOUT}s)..."
+    all_ok=1
+    for pid in "${pids[@]}"; do
+        if ! wait "$pid"; then
+            all_ok=0
+        fi
+    done
+    
+    if [ "$all_ok" -eq 0 ]; then
+        echo "ERROR: One or more servers failed to start within timeout period"
+        exit 1
+    fi
+    
+    echo "All servers are ready!"
     export RUN_ARGS="--benchmarks=deepseek-r1 --scenarios=$scenario --trtllm_server_urls=${endpoints} --trtllm_runtime_flags=max_concurrency:$concurrency"
     export SYSTEM_NAME="GB300-NVL${num_total_gpus}"
     srun --overlap --nodes=1 --ntasks=1 \

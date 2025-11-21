@@ -185,7 +185,7 @@ cuda_graph_config:
 disable_overlap_scheduler: false
 kv_cache_config:
   dtype: fp8
-  cache_reuse: false
+  enable_block_reuse: false
 scheduler_config:
   capacity_scheduler_policy: MAX_UTILIZATION
   context_chunking_policy: FIRST_COME_FIRST_SERVED
@@ -205,9 +205,6 @@ if [ "$enable_adp" = 1 ]; then
   batching_wait_iters: 2
   timeout_iters: 6" >> ${dir_name}/extra-llm-api-config.yml
 fi
-
-# Set clocks
-srun --ntasks-per-node=1 --mpi=pmi2 /bin/bash ${actual_workdir}/scripts/set_clocks.sh
 
 if [ "$mode" = "bench" ]; then 
     trtllm_flags="--model=nvidia/DeepSeek-R1-FP4 \
@@ -244,8 +241,7 @@ else
         --max_seq_len 23140 \
         --max_beam_width 1 \
         --tokenizer /home/mlperf_inference_storage/models/hf_ckpnts/DeepSeek-R1-FP4 \
-        --backend pytorch \
-        --disable_gc"
+        --backend pytorch"
 
 fi
 

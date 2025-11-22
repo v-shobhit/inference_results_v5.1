@@ -13,7 +13,7 @@ pylatexenc==2.10
 
 # -e /work/build/inference/language/deepseek-r1/submodules/LiveCodeBench
 # -e /work/build/inference/language/deepseek-r1/submodules/prm800k
-huggingface_hub[cli]==0.32.0
+# huggingface_hub[cli]==0.32.0
 openai-whisper==20240930
 librosa==0.10.1
 tiktoken==0.9.0
@@ -23,3 +23,5 @@ num2words==0.5.14
 sox==1.5.0
 
 orjson
+huggingface-hub>=0.34.0
+datasets==3.1.0

@@ -169,7 +169,7 @@ srun_header="srun --nodes=${num_nodes_dp1} --ntasks-per-node=${num_tasks_per_nod
     --export=TRTLLM_MOE_ENABLE_ALLTOALL_WITHOUT_ALLGATHER=1 \
     --container-workdir=/code/tensorrt_llm \
     --mpi=pmi2 \
-    --no-container-remap-root"
+    --container-remap-root"
 
 if [ -n "$nsys" ]; then
     srun_header="${srun_header} --export=TLLM_PROFILE_START_STOP=${profile_iter_range}"
@@ -245,8 +245,6 @@ else
 
 fi
 
-set -x 
-
 # Execute the servers/benchmarks
 for i in $(seq 1 $num_servers); do
     ${srun_header} \
@@ -276,18 +274,18 @@ endpoints=$(format_hostnames $num_servers $node_list)
 echo "trtllm_server_urls: $endpoints"
 
 if [ "$run_client" = 1 ]; then
-    # warmup and health check is disabled, hence wait for server
-    # Extract hostnames from endpoints and wait for port 30000 to be active on each
     TIMEOUT=1200  # 20 minutes timeout
     IFS=',' read -ra endpoint_array <<< "$endpoints"
     pids=()
-    
+
+    # Wait for all port checks to complete and check for failures
+    echo "Waiting for server ports to be active on $endpoints (timeout: ${TIMEOUT}s)..."
     for endpoint in "${endpoint_array[@]}"; do
         hostname=$(echo "$endpoint" | cut -d':' -f1)
         echo "Starting port check for $hostname:30000 (timeout: ${TIMEOUT}s)"
         
         # Run overlapping job step on each node to check for port 30000
-        srun --overlap --nodes=1 --nodelist="$hostname" --ntasks=1 \
+        srun --overlap --nodes=1 --nodelist="$hostname" --ntasks=1 --container-image=$mlperf_container_image \
             bash -c "
                 TIMEOUT=$TIMEOUT
                 elapsed=0
@@ -305,36 +303,31 @@ if [ "$run_client" = 1 ]; then
             " &
         pids+=($!)
     done
-    
-    # Wait for all port checks to complete and check for failures
-    echo "Waiting for port 30000 to be active on all nodes (timeout: ${TIMEOUT}s)..."
+
     all_ok=1
     for pid in "${pids[@]}"; do
         if ! wait "$pid"; then
             all_ok=0
         fi
     done
-    
+
     if [ "$all_ok" -eq 0 ]; then
         echo "ERROR: One or more servers failed to start within timeout period"
         exit 1
     fi
-    
+
     echo "All servers are ready!"
     export RUN_ARGS="--benchmarks=deepseek-r1 --scenarios=$scenario --trtllm_server_urls=${endpoints} --trtllm_runtime_flags=max_concurrency:$concurrency"
     export SYSTEM_NAME="GB300-NVL${num_total_gpus}"
     srun --overlap --nodes=1 --ntasks=1 \
         --container-image=${mlperf_container_image} \
         --mpi=pmi2 \
-        --container-mounts=$(pwd):/work,${mlperf_scratch_space}:/home/mlperf_inference_storage \
+        --container-mounts=$(git rev-parse --show-toplevel)/closed/NVIDIA:/work,${mlperf_scratch_space}:/home/mlperf_inference_storage \
         --export=RUN_ARGS,SYSTEM_NAME \
         --container-workdir=/work \
         --output=${dir_name}/mlperf-harness-run.out \
-        /bin/bash -c "pip install build/inference/loadgen/mlcommons_loadgen*.whl orjson && pip install -r docker/common/requirements/requirements.llm.txt && make run_harness"
-
-    srun --overlap --ntasks-per-node=1 \
-        --container-name=trtllm-serve-container \
-        pkill -9 ${base_cmd}
+        --container-remap-root \
+        make run_harness
 else
     wait
 fi

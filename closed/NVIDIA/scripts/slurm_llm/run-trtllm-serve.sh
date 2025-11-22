@@ -318,7 +318,7 @@ if [ "$run_client" = 1 ]; then
 
     echo "All servers are ready!"
     export RUN_ARGS="--benchmarks=deepseek-r1 --scenarios=$scenario --trtllm_server_urls=${endpoints} --trtllm_runtime_flags=max_concurrency:$concurrency"
-    export SYSTEM_NAME="GB300-NVL${num_total_gpus}"
+    export SYSTEM_NAME="GB300-NVL72_GB300-288GB_aarch64x${num_total_gpus}_TRT"
     srun --overlap --nodes=1 --ntasks=1 \
         --container-image=${mlperf_container_image} \
         --mpi=pmi2 \

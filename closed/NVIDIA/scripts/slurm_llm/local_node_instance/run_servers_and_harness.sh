@@ -131,8 +131,6 @@ format_hostnames() {
     echo "$result"
 }
 
-set -x
-
 export scenario="${scenario,,}"
 node_list=$(scontrol show hostnames $SLURM_NODELIST)
 export endpoints=$(format_hostnames $num_instances_per_node $node_list)
@@ -161,7 +159,6 @@ export srun_header="srun --container-image=$mlperf_container_image --container-m
 ### If there is a unified file system, build the engine first which all trtllm-serve instances can use
 echo "Generating engines, check $output_dir/slurm-$SLURM_JOB_ID-generate_engines.txt for progress"
 $srun_header \
-    --container-name=$container_name_suffix-generate_engines \
     --nodes=1 \
     --export=RUN_ARGS="$base_run_args",script_dir,SYSTEM_NAME \
     --output=$output_dir/slurm-$SLURM_JOB_ID-generate_engines.txt \
@@ -179,7 +176,6 @@ for node in $node_list; do
     echo "Launching server on $node, check $output_dir/slurm-$SLURM_JOB_ID-$node-server-launch-log.txt for progress"
     $srun_header \
         --export=RUN_ARGS,script_dir,SYSTEM_NAME \
-        --container-name=$container_name_suffix-run_llm_server \
         --nodes=1 \
         -w $node \
         --output=$output_dir/slurm-$SLURM_JOB_ID-$node-server-launch-log.txt \
@@ -195,7 +191,6 @@ export RUN_ARGS="$base_run_args \
 export HF_TOKEN=$hf_token
 echo "Running accuracy run, check $output_dir/slurm-$SLURM_JOB_ID-run_harness_accuracy.txt for progress"
 $srun_header --overlap \
-    --container-name=$container_name_suffix-run_harness_accuracy \
     --nodes=1 \
     --export=RUN_ARGS,script_dir,SYSTEM_NAME,HF_TOKEN \
     --output=$output_dir/slurm-$SLURM_JOB_ID-run_harness_accuracy.txt \
@@ -209,15 +204,8 @@ export RUN_ARGS="$base_run_args \
 ## Performance run
 echo "Running performance run, check $output_dir/slurm-$SLURM_JOB_ID-run_harness_performance.txt for progress"
 $srun_header --overlap \
-    --container-name=$container_name_suffix-run_harness_performance \
     --nodes=1 \
     --export=RUN_ARGS,script_dir,SYSTEM_NAME,HF_TOKEN \
     --output=$output_dir/slurm-$SLURM_JOB_ID-run_harness_performance.txt \
     /bin/bash -c 'source $script_dir/local_node_instance/prefix.sh && make run_harness'
 
-srun --overlap \
-    --container-name=$container_name_suffix-run_llm_server \
-    --ntasks-per-node=1 \
-    /bin/bash -c 'pkill -9 make'
-
-wait

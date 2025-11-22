@@ -280,6 +280,7 @@ if [ "$run_client" = 1 ]; then
 
     # Wait for all port checks to complete and check for failures
     echo "Waiting for server ports to be active on $endpoints (timeout: ${TIMEOUT}s)..."
+    echo "Check ${dir_name}/trtllm-serve-* for progress"
     for endpoint in "${endpoint_array[@]}"; do
         hostname=$(echo "$endpoint" | cut -d':' -f1)
         echo "Starting port check for $hostname:30000 (timeout: ${TIMEOUT}s)"

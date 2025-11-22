@@ -487,10 +487,10 @@ class TrtllmExtraYAMLConfig(TrtllmHarnessConfig):
                 'context_chunking_policy': runtime_flags['context_chunking_policy'],
             },
 
-            'kv_cache_dtype': checkpoint_flags['kv_cache_dtype'],
             'kv_cache_config': {
                 'free_gpu_memory_fraction': runtime_flags['kvcache_free_gpu_mem_frac'],
                 'enable_block_reuse': False,
+                'dtype': checkpoint_flags['kv_cache_dtype'],
             },
 
             'enable_attention_dp': build_flags['enable_attention_dp'],
@@ -499,17 +499,16 @@ class TrtllmExtraYAMLConfig(TrtllmHarnessConfig):
         if using_pytorch:
             config_dict |= {
                 'torch_compile_enabled': build_flags['torch_compile_enabled'],
-                'use_cuda_graph': runtime_flags['use_cuda_graphs'],
                 'moe_backend': runtime_flags['moe_backend'],
             }
 
-            if config_dict['use_cuda_graph']:
+            if runtime_flags['use_cuda_graphs']:
                 assert runtime_flags['cuda_graph_batch_sizes'] is not None, \
                     logging.error(f"CUDA graphs enabled but no cuda_graph_batch_sizes provided. ")
 
-                config_dict |= {
-                    'cuda_graph_padding_enabled': runtime_flags['cuda_graph_padding_enabled'],
-                    'cuda_graph_batch_sizes': runtime_flags['cuda_graph_batch_sizes'],
+                config_dict['cuda_graph_config'] |= {
+                    'enable_padding': runtime_flags['cuda_graph_padding_enabled'],
+                    'batch_sizes': runtime_flags['cuda_graph_batch_sizes'],
 
                     # NOTE(vir): we dont rely on automatic batch-sizes
                     # 'cuda_graph_max_batch_size': 0

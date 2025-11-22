@@ -155,7 +155,7 @@ if [ "$trtllm_backend" == "trt" ]; then
     export base_run_args="$base_run_args --trtllm_runtime_flags=trtllm_backend:cpp"
 fi
 
-export srun_header="srun --container-image=$mlperf_container_image --container-mounts=$container_mount --container-workdir=$container_workdir"
+export srun_header="srun --container-image=$mlperf_container_image --container-mounts=$container_mount --container-workdir=$container_workdir --container-remap-root"
 
 
 ### If there is a unified file system, build the engine first which all trtllm-serve instances can use

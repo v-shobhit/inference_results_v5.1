@@ -499,7 +499,9 @@ class TrtllmExtraYAMLConfig(TrtllmHarnessConfig):
         if using_pytorch:
             config_dict |= {
                 'torch_compile_enabled': build_flags['torch_compile_enabled'],
-                'moe_backend': runtime_flags['moe_backend'],
+                'moe_config': {
+                    'backend': runtime_flags['moe_backend'],
+                },
             }
 
             if runtime_flags['use_cuda_graphs']:

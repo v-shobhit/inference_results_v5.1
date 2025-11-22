@@ -317,6 +317,7 @@ if [ "$run_client" = 1 ]; then
     fi
 
     echo "All servers are ready!"
+    echo "Check ${dir_name}/mlperf-harness-run.out for benchmark run progress"
     export RUN_ARGS="--benchmarks=deepseek-r1 --scenarios=$scenario --trtllm_server_urls=${endpoints} --trtllm_runtime_flags=max_concurrency:$concurrency"
     export SYSTEM_NAME="GB300-NVL72_GB300-288GB_aarch64x${num_total_gpus}_TRT"
     srun --overlap --nodes=1 --ntasks=1 \

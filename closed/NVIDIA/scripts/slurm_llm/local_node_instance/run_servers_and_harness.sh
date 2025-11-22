@@ -19,8 +19,10 @@ usage="sbatch \\
     --core_type=value \\
     --num_instances_per_node=value \\
     --system_name=value \\
-    --trtllm_backend=torch|trt"
+    --trtllm_backend=torch|trt \\
+    --hf_token=value"
 
+hf_token=""
 while [[ $# -gt 0 ]]; do
     case $1 in
         --mlperf_container_image=*)
@@ -57,6 +59,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --trtllm_backend=*)
             trtllm_backend="${1#*=}"
+            shift
+            ;;
+        --hf_token=*)
+            hf_token="${1#*=}"
             shift
             ;;
         --help|-h)
@@ -153,6 +159,7 @@ export srun_header="srun --container-image=$mlperf_container_image --container-m
 
 
 ### If there is a unified file system, build the engine first which all trtllm-serve instances can use
+echo "Generating engines, check $output_dir/slurm-$SLURM_JOB_ID-generate_engines.txt for progress"
 $srun_header \
     --container-name=$container_name_suffix-generate_engines \
     --nodes=1 \
@@ -169,6 +176,7 @@ export RUN_ARGS="$base_run_args \
  --server_in_foreground"
 
 for node in $node_list; do
+    echo "Launching server on $node, check $output_dir/slurm-$SLURM_JOB_ID-$node-server-launch-log.txt for progress"
     $srun_header \
         --export=RUN_ARGS,script_dir,SYSTEM_NAME \
         --container-name=$container_name_suffix-run_llm_server \
@@ -184,10 +192,12 @@ export RUN_ARGS="$base_run_args \
  --test_mode=AccuracyOnly"
 
 ## Accuracy run
+export HF_TOKEN=$hf_token
+echo "Running accuracy run, check $output_dir/slurm-$SLURM_JOB_ID-run_harness_accuracy.txt for progress"
 $srun_header --overlap \
     --container-name=$container_name_suffix-run_harness_accuracy \
     --nodes=1 \
-    --export=RUN_ARGS,script_dir,SYSTEM_NAME \
+    --export=RUN_ARGS,script_dir,SYSTEM_NAME,HF_TOKEN \
     --output=$output_dir/slurm-$SLURM_JOB_ID-run_harness_accuracy.txt \
     /bin/bash -c 'source $script_dir/local_node_instance/prefix.sh && make run_harness'
 
@@ -197,10 +207,11 @@ export RUN_ARGS="$base_run_args \
  --test_mode=PerformanceOnly"
 
 ## Performance run
+echo "Running performance run, check $output_dir/slurm-$SLURM_JOB_ID-run_harness_performance.txt for progress"
 $srun_header --overlap \
     --container-name=$container_name_suffix-run_harness_performance \
     --nodes=1 \
-    --export=RUN_ARGS,script_dir,SYSTEM_NAME \
+    --export=RUN_ARGS,script_dir,SYSTEM_NAME,HF_TOKEN \
     --output=$output_dir/slurm-$SLURM_JOB_ID-run_harness_performance.txt \
     /bin/bash -c 'source $script_dir/local_node_instance/prefix.sh && make run_harness'
 

@@ -14,7 +14,7 @@ base = {
 
     # Length limits and beam width are set by MLCommons rules and should not be changed.
     loadgen_fields.min_duration: 2_000_000,
-    loadgen_fields.min_query_count: 16 * 4388,  # 150 * 4388,
+    loadgen_fields.min_query_count: 48 * 4388,  # 150 * 4388,
     llm_fields.warmup_iterations: 0,
     llm_fields.use_token_latencies: True,
     llm_fields.trtllm_build_flags: {

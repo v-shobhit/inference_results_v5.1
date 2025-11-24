@@ -508,7 +508,7 @@ class TrtllmExtraYAMLConfig(TrtllmHarnessConfig):
                 assert runtime_flags['cuda_graph_batch_sizes'] is not None, \
                     logging.error(f"CUDA graphs enabled but no cuda_graph_batch_sizes provided. ")
 
-                config_dict['cuda_graph_config'] |= {
+                config_dict['cuda_graph_config'] = {
                     'enable_padding': runtime_flags['cuda_graph_padding_enabled'],
                     'batch_sizes': runtime_flags['cuda_graph_batch_sizes'],
 

@@ -37,12 +37,15 @@ See `./run-trtllm-serve --help`, a sample command to run deepseek-r1 is:
 ```bash
 salloc --partition gb300-perf \
   --time 02:00:00 \
-  --nodes 2 # min is 2 - use 4, 8 or 18 to scale out with dp=2,4,9 respectively
+  --nodes 2
+```
 
+After nodes are allocated:
+```bash
 ./run-trtllm-serve.sh \
   --mlperf_scratch_space /path/to/mlperf_scratch_space \
   --trtllm_container_image ./gb300-container.sqsh \
-  --mlperf_container_image ./gb300-container.sqsh \ # recommend to use the same
+  --mlperf_container_image ./gb300-container.sqsh \
   --scenario Offline \
   --mode serve \
   --run_client
@@ -64,14 +67,17 @@ You can use `local_node_instances` module for running 405B, similar to other sys
 ./local_node_instance/run_servers_and_harness.sh \
   --mlperf_container_image=./gb300-container.sqsh \
   --mlperf_scratch_path=/path/to/mlperf_inference_storage \
-  --trt_engine_artefacts=/path/to/some/artefacts/ \ # unused if --trtllm_backend=torch
+  --trt_engine_artefacts=/path/to/some/artefacts/ \
   --scenario=Offline \
   --benchmark_name=llama3.1-405b \
   --core_type=trtllm_endpoint \
-  --num_instances_per_node=2 \ # since we use tp2pp1 (2 gpus per instance), and GB300 has 4 GPUs/node 
-  --system_name=GB300-NVL72_GB300-288GB_aarch64x4_TRT \ # Use accordingly
-  --trtllm_backend=torch \ # Only torch supported for GB300
-  --hf_token=YOUR_HF_TOKEN # get a hf_token from https://huggingface.co/settings/tokens
+  --num_instances_per_node=2 \
+  --system_name=GB300-NVL72_GB300-288GB_aarch64x4_TRT \
+  --trtllm_backend=torch \
+  --hf_token=YOUR_HF_TOKEN
+
+# --num_instances_per_node=2 -> since we use tp2pp1 (2 gpus per instance), and GB300 has 4 GPUs/node
+# --hf_token=YOUR_HF_TOKEN   -> get a HF token from https://huggingface.co/settings/tokens
 ```
 
 Note that it does:

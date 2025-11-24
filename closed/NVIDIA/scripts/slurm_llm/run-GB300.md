@@ -56,7 +56,7 @@ Please check configs under `closed/NVIDIA/configs/GB300-NVL72_GB300-288GB_aarch6
 - This script launches one/multiple `trtllm-serve` instances via `trtllm-llmapi-launch` across nodes in a slurm job allocation. 
 - If `--run_client` is specified, then it will launch a single task with `make run_harness`:
     - the trtllm-serve endpoints are launched in order of `scontrol show hostnames $SLURM_NODELIST`
-    - warmup is disabled - please make sure to hard code the time sufficient to load engine + start server before the harness job step is launched
+    - Launches the servers, uses `telnet` to check if port(s) are active and then launches the harness. Please monitor `trtllm-serve` logs at `logs/run_${SLURM_JOBID}` to check server launch progress.
 - else, servers wait indefinitely till manually killed/canceled. 
 
 

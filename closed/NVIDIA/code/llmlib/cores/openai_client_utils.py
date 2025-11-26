@@ -25,6 +25,7 @@ import multiprocessing as mp
 import queue
 import time
 import os
+from pathlib import Path
 from typing import List
 import uvloop
 
@@ -33,6 +34,7 @@ from openai import AsyncOpenAI
 from tokenizers import Tokenizer as AutoTokenizer
 
 from ..config import TrtllmEndpointConfig
+from ..utils import PrefixLogger
 from .base import LLMRequest, LLMResponse
 from .mp_worker_utils import WorkerProcessManager
 
@@ -57,12 +59,16 @@ class OpenAIConcurrentRequestManager:
                  config: TrtllmEndpointConfig,
                  max_concurrency: int,
                  workers_per_core: int,
-                 log_dir: str):
+                 log_dir: str,
+                 verbose: bool = False):
         self.config = config
         self.max_concurrency = max_concurrency
         self.workers_per_core = workers_per_core
         self.log_dir = log_dir
+        self.verbose = verbose
         self.model_name, self.model_revision = list(self.config.get_model_repo().items())[0]
+        # Use local model_path for tokenizer if available to avoid HF authentication
+        self.tokenizer_path = config.model_path if hasattr(config, 'model_path') and config.model_path else self.model_name
 
         self._loop = None
         self._request_provider = None
@@ -88,7 +94,9 @@ class OpenAIConcurrentRequestManager:
             self.request_queues,
             self._response_queue,
             self.model_name,
-            self.model_revision
+            self.model_revision,
+            self.tokenizer_path,
+            self.verbose
         ]
         self.worker_processes = self._worker_manager.start_worker_processes(
             worker_count=self.workers_per_core,
@@ -180,6 +188,8 @@ class OpenAIConcurrentRequestManager:
         response_queue: mp.Queue,
         model_name: str,
         model_revision: str,
+        tokenizer_path: str,
+        verbose: bool,
         worker_id: int,
         readiness_queue: mp.Queue,
     ):
@@ -205,7 +215,9 @@ class OpenAIConcurrentRequestManager:
                 response_queue,
                 readiness_queue,
                 model_name,
-                model_revision
+                model_revision,
+                tokenizer_path,
+                verbose
             ))
         finally:
             # Always clean up the event loop
@@ -220,7 +232,9 @@ class OpenAIConcurrentRequestManager:
         response_queue: mp.Queue,
         readiness_queue: mp.Queue,
         model_name: str,
-        model_revision: str
+        model_revision: str,
+        tokenizer_path: str,
+        verbose: bool = False
     ):
         """ Worker loop for multiprocess mode. """
         try:
@@ -229,7 +243,9 @@ class OpenAIConcurrentRequestManager:
                 config,
                 max_concurrency,
                 model_name,
-                model_revision
+                model_revision,
+                tokenizer_path,
+                verbose
             )
             await request_provider.initialize()
 
@@ -300,12 +316,21 @@ class OpenAIConcurrentRequestProvider:
                  config: TrtllmEndpointConfig,
                  max_concurrency: int,
                  model_name: str,
-                 model_revision: str):
+                 model_revision: str,
+                 tokenizer_path: str,
+                 verbose: bool = False):
         self.config = config
         self.max_concurrency = max_concurrency
         self.model_name = model_name
         self.model_revision = model_revision
+        self.tokenizer_path = tokenizer_path
+        self.verbose = verbose
         self.endpoint_url = config.endpoint_url
+        
+        # Set up logger with prefix like TrtllmEndpointCore does
+        self.logger = PrefixLogger(prefix=f"OpenAIWorker-{os.getpid()}")
+        if self.verbose:
+            self.logger.setLevel(logging.DEBUG)
 
         # Initialize resources (will be set up in initialize() method)
         self.http_client = None
@@ -348,8 +373,22 @@ class OpenAIConcurrentRequestProvider:
             http_client=self.http_client,  # Use our configured HTTP client
         )
 
-        # Load tokenizer for converting between text and tokens
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, revision=self.model_revision)
+        # Load tokenizer from local path to avoid HF authentication
+        # Falls back to HF repo if tokenizer_path equals model_name (legacy behavior)
+
+        # tokenizers.Tokenizer.from_pretrained expects a path to tokenizer.json or a HF repo
+        tokenizer_path_obj = Path(self.tokenizer_path)
+        if tokenizer_path_obj.exists() and tokenizer_path_obj.is_dir():
+            # If it's a directory, look for tokenizer.json inside
+            tokenizer_file = tokenizer_path_obj / "tokenizer.json"
+            if tokenizer_file.exists():
+                self.tokenizer = AutoTokenizer.from_file(str(tokenizer_file))
+            else:
+                # Fallback: try loading as directory (may work for some tokenizer formats)
+                self.tokenizer = AutoTokenizer.from_pretrained(str(self.tokenizer_path))
+        else:
+            # Fallback to HF repo (requires authentication for gated models)
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, revision=self.model_revision)
 
     async def process_request(self, request: LLMRequest, response_queue) -> None:
         """
@@ -386,6 +425,19 @@ class OpenAIConcurrentRequestProvider:
         # Add stop tokens if configured
         if self.config.gen_config.use_stop_tokens:
             gen_params["stop_token_ids"] = request.stop_tokens
+        
+        # Log request pattern in verbose mode (first request only to avoid spam)
+        if self.verbose and not hasattr(self, '_logged_first_request'):
+            self._logged_first_request = True
+            import json
+            params_for_display = gen_params.copy()
+            # Truncate prompt_token_ids for readability
+            if "extra_body" in params_for_display and "prompt_token_ids" in params_for_display["extra_body"]:
+                token_ids = params_for_display["extra_body"]["prompt_token_ids"]
+                if len(token_ids) > 20:
+                    params_for_display["extra_body"]["prompt_token_ids"] = token_ids[:20] + [f"... (truncated, total={len(token_ids)} tokens)"]
+            self.logger.debug(f"Request endpoint: http://{self.endpoint_url}/v1/chat/completions")
+            self.logger.debug(f"Request params sample:\n{json.dumps(params_for_display, indent=2)}")
 
         # Route to appropriate handler based on streaming configuration
         if self.config.gen_config.streaming:
@@ -494,3 +546,4 @@ class OpenAIConcurrentRequestProvider:
         """ Clean up resources. """
         if self.http_client:
             await self.http_client.aclose()
+

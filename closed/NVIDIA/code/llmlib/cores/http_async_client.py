@@ -25,6 +25,7 @@ import signal
 import time
 import os
 import uuid
+from pathlib import Path
 from typing import List, Optional, Dict, Any
 
 import aiohttp
@@ -41,6 +42,7 @@ asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 from tokenizers import Tokenizer as AutoTokenizer
 
 from ..config import TrtllmEndpointConfig
+from ..utils import PrefixLogger
 from .base import LLMRequest, LLMResponse
 from .mp_worker_utils import WorkerProcessManager
 
@@ -273,12 +275,16 @@ class AsyncLLMHttpRequestManager:
                  config: TrtllmEndpointConfig,
                  max_concurrency: int,
                  workers_per_core: int,
-                 log_dir: str):
+                 log_dir: str,
+                 verbose: bool = False):
         self.config = config
         self.max_concurrency = max_concurrency
         self.workers_per_core = workers_per_core
         self.log_dir = log_dir
+        self.verbose = verbose
         self.model_name, self.model_revision = list(self.config.get_model_repo().items())[0]
+        # Use local model_path for tokenizer if available to avoid HF authentication
+        self.tokenizer_path = config.model_path if hasattr(config, 'model_path') and config.model_path else self.model_name
 
         self._response_queue = None
         self._zmq_resources_initialized = False
@@ -345,7 +351,9 @@ class AsyncLLMHttpRequestManager:
             self.request_endpoint,
             self.response_endpoint,
             self.model_name,
-            self.model_revision
+            self.model_revision,
+            self.tokenizer_path,
+            self.verbose
         ]
 
         # Start worker processes
@@ -475,7 +483,7 @@ class AsyncLLMHttpRequestManager:
     @classmethod
     def _worker_process_main(cls, config: TrtllmEndpointConfig, max_concurrency: int,
                              request_endpoint: str, response_endpoint: str,
-                             model_name: str, model_revision: str,
+                             model_name: str, model_revision: str, tokenizer_path: str, verbose: bool,
                              worker_id: int, readiness_queue: mp.Queue,):
         """Main function for ZMQ multiprocess worker."""
         # NOTE(vir):
@@ -489,14 +497,14 @@ class AsyncLLMHttpRequestManager:
         try:
             loop.run_until_complete(cls._worker_loop(config, max_concurrency,
                                                      request_endpoint, response_endpoint,
-                                                     readiness_queue, model_name, model_revision))
+                                                     readiness_queue, model_name, model_revision, tokenizer_path, verbose))
         finally:
             loop.close()
 
     @classmethod
     async def _worker_loop(cls, config: TrtllmEndpointConfig, max_concurrency: int,
                            request_endpoint: str, response_endpoint: str,
-                           readiness_queue: mp.Queue, model_name: str, model_revision: str):
+                           readiness_queue: mp.Queue, model_name: str, model_revision: str, tokenizer_path: str, verbose: bool = False):
         """Worker loop for ZMQ multiprocess mode."""
         # Create ZMQ asyncio context for this worker
         zmq_context = zmq.asyncio.Context()
@@ -518,7 +526,7 @@ class AsyncLLMHttpRequestManager:
         response_socket.setsockopt(zmq.LINGER, 0)
 
         try:
-            request_provider = AsyncHttpLLMClient(config, max_concurrency, model_name, model_revision)
+            request_provider = AsyncHttpLLMClient(config, max_concurrency, model_name, model_revision, tokenizer_path, verbose)
             await request_provider.initialize()
             readiness_queue.put(True)
         except Exception as e:
@@ -577,12 +585,19 @@ class AsyncHttpLLMClient:
     Supports multiprocess (ZMQ-based) mode for request concurrency.
     """
 
-    def __init__(self, config: TrtllmEndpointConfig, max_concurrency: int, model_name: str, model_revision: str):
+    def __init__(self, config: TrtllmEndpointConfig, max_concurrency: int, model_name: str, model_revision: str, tokenizer_path: str, verbose: bool = False):
         self.config = config
         self.max_concurrency = max_concurrency
         self.model_name = model_name
         self.model_revision = model_revision
+        self.tokenizer_path = tokenizer_path
+        self.verbose = verbose
         self.endpoint_url = f"http://{config.endpoint_url}/v1/chat/completions"
+        
+        # Set up logger with prefix like TrtllmEndpointCore does
+        self.logger = PrefixLogger(prefix=f"AsyncHttpWorker-{os.getpid()}")
+        if self.verbose:
+            self.logger.setLevel(logging.DEBUG)
 
         if HTTP_OVERRIDE_USE_COMPLETIONS:
             self.endpoint_url = f"http://{config.endpoint_url}/v1/completions"
@@ -620,11 +635,23 @@ class AsyncHttpLLMClient:
             }
         )
 
-        # Load tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            self.model_name,
-            revision=self.model_revision
-        )
+        # Load tokenizer from local path to avoid HF authentication
+        # tokenizers.Tokenizer.from_pretrained expects a path to tokenizer.json or a HF repo
+        tokenizer_path_obj = Path(self.tokenizer_path)
+        if tokenizer_path_obj.exists() and tokenizer_path_obj.is_dir():
+            # If it's a directory, look for tokenizer.json inside
+            tokenizer_file = tokenizer_path_obj / "tokenizer.json"
+            if tokenizer_file.exists():
+                self.tokenizer = AutoTokenizer.from_file(str(tokenizer_file))
+            else:
+                # Fallback: try loading as directory (may work for some tokenizer formats)
+                self.tokenizer = AutoTokenizer.from_pretrained(str(self.tokenizer_path))
+        else:
+            # Fallback to HF repo (requires authentication for gated models)
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                self.model_name,
+                revision=self.model_revision
+            )
 
     async def process_request(self, request: LLMRequest, response_socket: zmq.asyncio.Socket) -> None:
         """Process request and send response via ZMQ (multiprocess mode)."""
@@ -687,7 +714,20 @@ class AsyncHttpLLMClient:
         if self.config.gen_config.use_stop_tokens:
             data["stop_token_ids"] = request.stop_tokens
 
-        return orjson.dumps(data)
+        payload = orjson.dumps(data)
+        
+        # Log request pattern in verbose mode (first request only to avoid spam)
+        if self.verbose and not hasattr(self, '_logged_first_request'):
+            self._logged_first_request = True
+            data_for_display = orjson.loads(payload)
+            # Truncate prompt_token_ids for readability
+            if "prompt_token_ids" in data_for_display and len(data_for_display["prompt_token_ids"]) > 20:
+                token_ids = data_for_display["prompt_token_ids"]
+                data_for_display["prompt_token_ids"] = token_ids[:20] + [f"... (truncated, total={len(token_ids)} tokens)"]
+            self.logger.debug(f"Request endpoint: {self.endpoint_url}")
+            self.logger.debug(f"Request payload sample:\n{orjson.dumps(data_for_display, option=orjson.OPT_INDENT_2).decode()}")
+        
+        return payload
 
     async def _handle_streaming_from_chat_completions(self, request: LLMRequest, payload: bytes,
                                                       response_queue=None, response_socket=None) -> None:
@@ -906,3 +946,4 @@ class AsyncHttpLLMClient:
         """Clean up resources."""
         if self.session:
             await self.session.close()
+

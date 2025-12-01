@@ -10,7 +10,7 @@ For deepseek-r1, use the _latest_ trtllm release container
 sbatch --partition gb300-backfill --time 10:00 --nodes=1 ./build-gb300-containers.sh --trtllm_ngc_container nvcr.io/nvidia/tensorrt-llm/release:1.2.0rc4
 ```
 
-For llama3.1-405b, please use nvcr.io/nvidia/tensorrt-llm/release:1.2.0rc1
+For llama3.1-405b, please use `nvcr.io/nvidia/tensorrt-llm/release:1.2.0rc1` - **later releases may suffer from a perf regression**
 ```bash
 sbatch --partition gb300-backfill --time 10:00 --nodes=1 ./build-gb300-containers.sh --trtllm_ngc_container nvcr.io/nvidia/tensorrt-llm/release:1.2.0rc1
 ```

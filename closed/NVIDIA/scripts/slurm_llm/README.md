@@ -18,7 +18,7 @@ Batching modes:
 - `Disaggregated`: __Not supported as of now.__
 
 ## Prerequisites:
-1. You need a `sqsh` image. See [closed/NVIDIA/pyxis/README.md](../../../pyxis/README.md)
+1. You need a `sqsh` image. See [closed/NVIDIA/pyxis/README.md](../../pyxis/README.md)
 ```bash
 $ make -f Makefile.pyxis build_base_sqsh \
     ARCH=x86_64|aarch64 \ # must match the compute node arch
@@ -27,9 +27,6 @@ $ make -f Makefile.pyxis build_base_sqsh \
 ```
 
 2. Please generate a huggingface access token from your account and substitute it in the prefix scripts [here](./cross_node_instances/prefix.sh) and [here](./local_node_instance/prefix.sh)
-
-## TLDR Repro
-Repro scripts may be found at [closed/NVIDIA/scripts/slurm_llm/repros](./repros)
 
 ### Local-node instance repro (llama, mixtral)
 The target scripts are:

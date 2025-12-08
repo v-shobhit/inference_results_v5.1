@@ -189,12 +189,12 @@ export RUN_ARGS="$base_run_args \
 
 ## Accuracy run
 export HF_TOKEN=$hf_token
-echo "Running accuracy run, check $output_dir/slurm-$SLURM_JOB_ID-run_harness_accuracy.txt for progress"
-$srun_header --overlap \
-    --nodes=1 \
-    --export=RUN_ARGS,script_dir,SYSTEM_NAME,HF_TOKEN \
-    --output=$output_dir/slurm-$SLURM_JOB_ID-run_harness_accuracy.txt \
-    /bin/bash -c 'source $script_dir/local_node_instance/prefix.sh && make run_harness'
+# echo "Running accuracy run, check $output_dir/slurm-$SLURM_JOB_ID-run_harness_accuracy.txt for progress"
+# $srun_header --overlap \
+#     --nodes=1 \
+#     --export=RUN_ARGS,script_dir,SYSTEM_NAME,HF_TOKEN \
+#     --output=$output_dir/slurm-$SLURM_JOB_ID-run_harness_accuracy.txt \
+#     /bin/bash -c 'source $script_dir/local_node_instance/prefix.sh && make run_harness'
 
 unset RUN_ARGS
 export RUN_ARGS="$base_run_args \

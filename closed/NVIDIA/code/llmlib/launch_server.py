@@ -274,8 +274,7 @@ class RunTrtllmServeOp(Operation):
 
             cmd = []
             if is_mpi_launch:
-                # TODO(vir): remove hardcoded string
-                cmd = ['/work/build/TRTLLM/tensorrt_llm/llmapi/trtllm-llmapi-launch', 'trtllm-serve']
+                cmd = ['trtllm-llmapi-launch', 'trtllm-serve']
                 gpu_ids = None
 
             else:
@@ -312,8 +311,8 @@ class RunTrtllmServeOp(Operation):
                 if arg_value is not None:
                     cmd.extend([arg_name, str(arg_value)])
 
-            if 'disable_gc' in self.trtllm_runtime_flags and self.trtllm_runtime_flags['disable_gc']:
-                cmd.append('--disable_gc')
+            # if 'disable_gc' in self.trtllm_runtime_flags and self.trtllm_runtime_flags['disable_gc']:
+            #     cmd.append('--disable_gc')
 
             log_file = self.log_dir / f'trtllm_serve_{index}.log'
             with open(log_file, 'w') as f:

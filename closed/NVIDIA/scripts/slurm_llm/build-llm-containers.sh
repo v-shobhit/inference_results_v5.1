@@ -1,6 +1,6 @@
 #!/bin/bash
 
-trtllm_ngc_container=nvcr.io/nvidia/tensorrt-llm/release:1.2.0rc3
+trtllm_ngc_container=nvcr.io/nvidia/tensorrt-llm/release:1.2.0rc1
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -21,7 +21,7 @@ git clone https://github.com/NVIDIA/mitten.git $root/build/mitten
 
 srun --ntasks=1 --nodes=1 \
     --container-image=$trtllm_ngc_container \
-    --container-save=./gb300-container.sqsh \
+    --container-save=./llm-mlpinf-container.sqsh \
     --container-mounts=$root:/work \
     --container-workdir=/work \
     --container-remap-root /work/scripts/slurm_llm/install_mlperf_deps.sh

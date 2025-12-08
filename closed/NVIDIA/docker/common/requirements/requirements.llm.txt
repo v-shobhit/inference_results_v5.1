@@ -23,5 +23,5 @@ num2words==0.5.14
 sox==1.5.0
 
 orjson
-huggingface-hub>=0.34.0
+huggingface-hub>=0.34.0,<1.0
 datasets==3.1.0

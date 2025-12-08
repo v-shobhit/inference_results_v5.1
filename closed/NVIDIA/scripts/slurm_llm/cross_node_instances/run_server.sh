@@ -12,6 +12,7 @@ num_total_gpus=$((num_nodes * gpus_per_node))
 repo_root=$(git rev-parse --show-toplevel)
 username=$(whoami)
 output_dir=$repo_root/closed/NVIDIA/build/slurm_logs
+system_name=""
 
 usage="sbatch \\
     run_server.sh \\
@@ -21,6 +22,7 @@ usage="sbatch \\
     --scenario=mlperf_scenario \\
     --benchmark_name=deepseek-r1 \\
     --core_type=trtllm_endpoint \\
+    --system_name=name_of_system \\
     --gpus_per_instance=num_gpus_per_model"
 
 # Parse command line arguments
@@ -57,6 +59,10 @@ while [[ $# -gt 0 ]]; do
         --help|-h)
             echo "Usage: $usage"
             exit 0
+            ;;
+        --system_name=*)
+            system_name="${1#*=}"
+            shift
             ;;
         *)
             echo "Unknown argument: $1"
@@ -139,27 +145,53 @@ export server_srun_header="srun --container-image=$mlperf_container_image \
  --container-mounts=$container_mount \
  --container-workdir=$container_workdir \
  --container-remap-root \
- --export=RUN_ARGS,script_dir \
+ --export=RUN_ARGS,script_dir,SYSTEM_NAME \
  --mpi=pmix"
+
+export SYSTEM_NAME=$system_name
 
 # make run_llm_server
 for i in $(seq 1 $num_server_instances); do
     $server_srun_header \
-    --container-name=mlperf_inference-run_llm_server \
     --nodes=$num_nodes_per_server \
     --ntasks=$gpus_per_instance \
-    --output=$output_dir/slurm-$SLURM_JOB_ID-server-launch-log-$i.txt \
     /bin/bash -c 'hostname && source $script_dir/cross_node_instances/prefix.sh && make run_llm_server' &
 done
 
+# make run_harness
+node_list=($(scontrol show hostnames "$SLURM_NODELIST"))
+
+server_urls=""
+server_nodes=""
+
+for i in "${!node_list[@]}"; do
+    if (( i % 2 == 0 )); then        # even index: 0,2,4,...
+        node="${node_list[$i]}"
+        server_url="${node}:30000"
+        if [[ -z "$server_urls" ]]; then
+            server_urls="$server_url"
+            server_nodes="$node"
+        else
+            server_urls+=",${server_url}"
+            server_nodes+=",${node}"
+        fi
+    fi
+done
+
+
+for n in ${server_nodes//,/ }; do
+    $server_srun_header -w $n --nodes 1 --ntasks 1 --overlap /bin/bash -c '
+        while netstat -tulnp 2>/dev/null | grep -q ":30000"; do
+          sleep 2
+        done
+      '
+done
+
+export RUN_ARGS="--benchmarks=$benchmark_name \
+ --scenarios=$scenario \
+ --core_type=$core_type \
+ --trtllm_server_urls=$server_urls"
+
+$server_srun_header --overlap --nodes 1 --ntasks 1 make run_harness
+
 wait
-# sleep 60
-### TODO: Run below with `--nodes=1 --nodelist=master_node`
-# srun --overlap --nodes=1 \
-# --container-name=mlperf_inference-run_llm_server \
-# --output=slurm-$SLURM_JOB_ID-run_client_harness.sh \
-# /work/code/llmlib/slurm/cross_node_instances/run_client.sh \
-# --num_slurm_tasks=$gpus_per_instance \
-# --model_path=$model_path \
-# --scenario=$scenario
-# --system_name=$system_name

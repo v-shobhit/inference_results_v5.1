@@ -194,4 +194,3 @@ export RUN_ARGS="--benchmarks=$benchmark_name \
 
 $server_srun_header --overlap --nodes 1 --ntasks 1 make run_harness
 
-wait

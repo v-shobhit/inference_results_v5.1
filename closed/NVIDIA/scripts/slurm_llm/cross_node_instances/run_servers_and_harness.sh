@@ -15,7 +15,7 @@ output_dir=$repo_root/closed/NVIDIA/build/slurm_logs
 system_name=""
 
 usage="sbatch \\
-    run_server.sh \\
+    $0 \\
     --mlperf_container_image=/path/to/mlperf/sqsh \\
     --mlperf_scratch_path=/path/to/mlperf_inference_storage \\
     --trt_engine_artefacts=/path/to/large/vol/storage \\
@@ -181,7 +181,7 @@ done
 
 for n in ${server_nodes//,/ }; do
     $server_srun_header -w $n --nodes 1 --ntasks 1 --overlap /bin/bash -c '
-        while netstat -tulnp 2>/dev/null | grep -q ":30000"; do
+        while ! netstat -tulnp 2>/dev/null | grep -q ":30000"; do
           sleep 2
         done
       '

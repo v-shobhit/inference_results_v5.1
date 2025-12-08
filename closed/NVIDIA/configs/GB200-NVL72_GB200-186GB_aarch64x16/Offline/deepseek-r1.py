@@ -14,7 +14,7 @@ base = {
 
     # Length limits and beam width are set by MLCommons rules and should not be changed.
     loadgen_fields.min_duration: 600000,
-    loadgen_fields.min_query_count: 26328 * 16,
+    loadgen_fields.min_query_count: 26328 * 4,
     llm_fields.warmup_iterations: 0,
     llm_fields.use_token_latencies: True,
     llm_fields.trtllm_build_flags: {
@@ -60,7 +60,7 @@ base = {
     model_fields.gpu_batch_size: {
         'deepseek-r1': 512,
     },
-    loadgen_fields.offline_expected_qps: 15 * 9,
+    loadgen_fields.offline_expected_qps: 15 * 2,
 
     # You can try increasing these if you have multiple GPUs.
     llm_fields.tensor_parallelism: 8,

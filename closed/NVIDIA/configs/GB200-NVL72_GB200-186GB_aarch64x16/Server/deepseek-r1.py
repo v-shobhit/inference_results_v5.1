@@ -14,7 +14,7 @@ base = {
 
     # Length limits and beam width are set by MLCommons rules and should not be changed.
     loadgen_fields.min_duration: 600000,
-    loadgen_fields.min_query_count: 26328 * 16,
+    loadgen_fields.min_query_count: 26328 * 4,
     llm_fields.warmup_iterations: 0,
     llm_fields.use_token_latencies: True,
     llm_fields.trtllm_build_flags: {
@@ -24,7 +24,7 @@ base = {
         'multiple_profiles': 'enable',
         'use_fused_mlp': 'enable',
         'context_fmha': 'enable',
-        'max_num_tokens': 4608,
+        'max_num_tokens': 3456,
         'max_input_len': 3140,
         'max_seq_len': 3140 + 20000,
         'use_fp8_context_fmha': 'enable',
@@ -34,7 +34,7 @@ base = {
     llm_fields.trtllm_runtime_flags: {
         'exclude_input_from_output': True,
         'use_inflight_batching': True,
-        'max_num_tokens': 4608,
+        'max_num_tokens': 3456,
         'batch_scheduler_policy': 'max_util',
         'context_chunking_policy': 'first_come_first_served',
         'kvcache_free_gpu_mem_frac': 0.9,  # Progressively lower by 0.1/0.05 if you hit OOM errors.
@@ -44,8 +44,10 @@ base = {
         'cuda_graph_padding_enabled': True,
         'moe_backend': 'WIDEEP',
         "adp_balancing_enable": True,
-        "adp_balancing_batching_wait_iters": 10,
-        "adp_balancing_timeout_iters": 50,
+        # Setting lower bound and upper bound for iters to wait.
+        "adp_balancing_batching_wait_iters": 3,
+        "adp_balancing_timeout_iters": 9,
+        "disable_gc": True,
     },
     harness_fields.use_graphs: True,
 
@@ -60,7 +62,7 @@ base = {
     model_fields.gpu_batch_size: {
         'deepseek-r1': 512,
     },
-    loadgen_fields.offline_expected_qps: 15 * 9,
+    loadgen_fields.server_target_qps: 5 * 2,
 
     # You can try increasing these if you have multiple GPUs.
     llm_fields.tensor_parallelism: 8,

@@ -2,8 +2,7 @@
 Only `deepseek-r1` and `llama3_1-405b` functional. 
 
 ## Container for GB300
-It's highly recommended to use a TRTLLM release container on NGC as a starting point instead of the MLPerf release containers. For this, you can use [`build-gb300-containers.sh`](./build-gb300-containers.sh)
-
+It's highly recommended to use a TRTLLM release container on NGC as a starting point instead of the MLPerf release containers. For this, you can use [`build-llm-containers.sh`](./build-llm-containers.sh)
 
 For deepseek-r1, use the _latest_ trtllm release container
 ```bash

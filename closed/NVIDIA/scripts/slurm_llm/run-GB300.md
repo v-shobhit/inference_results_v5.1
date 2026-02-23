@@ -6,12 +6,12 @@ It's highly recommended to use a TRTLLM release container on NGC as a starting p
 
 For deepseek-r1, use the _latest_ trtllm release container
 ```bash
-sbatch --partition gb300-backfill --time 10:00 --nodes=1 ./build-gb300-containers.sh --trtllm_ngc_container nvcr.io/nvidia/tensorrt-llm/release:1.2.0rc4
+sbatch --partition gb300-backfill --time 10:00 --nodes=1 ./build-llm-containers.sh --trtllm_ngc_container nvcr.io/nvidia/tensorrt-llm/release:1.2.0rc4
 ```
 
 For llama3.1-405b, please use `nvcr.io/nvidia/tensorrt-llm/release:1.2.0rc1` - **later releases may suffer from a perf regression**
 ```bash
-sbatch --partition gb300-backfill --time 10:00 --nodes=1 ./build-gb300-containers.sh --trtllm_ngc_container nvcr.io/nvidia/tensorrt-llm/release:1.2.0rc1
+sbatch --partition gb300-backfill --time 10:00 --nodes=1 ./build-llm-containers.sh --trtllm_ngc_container nvcr.io/nvidia/tensorrt-llm/release:1.2.0rc1
 ```
 
 This will create an enroot SquashFS file named `./gb300-container.sqsh` for running LLM workloads.

@@ -17,7 +17,7 @@ EXPORTS = {
         model_fields.gpu_batch_size: {
             'llama3.1-405b': 64,
         },
-        loadgen_fields.min_query_count = 8313 * 10
+        loadgen_fields.min_query_count: 8313 * 10,
         model_fields.input_dtype: 'int32',
         llm_fields.llm_gen_config_path: 'code/llama3_1-405b/tensorrt/generation_config.json',
         loadgen_fields.min_duration: 600000,

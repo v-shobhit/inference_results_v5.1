@@ -406,10 +406,9 @@ class TrtllmExtraYAMLConfig(TrtllmHarnessConfig):
     DEFAULT_EXTRA_CONFIG = {
         # NOTE(vir): for now these apply only in pytorch backend
         'print_iter_log': True,
-        'enable_layerwise_nvtx_marker': False,
-        'stream_interval': 1,
-        'disable_overlap_scheduler': False,
         'enable_iter_perf_stats': True,  # enable /metrics endpoint for trtllm iter stats
+        'return_perf_metrics': True,
+        'enable_layerwise_nvtx_marker': False,
     }
 
     # TODO(vir): allow recursive dicts
@@ -477,6 +476,18 @@ class TrtllmExtraYAMLConfig(TrtllmHarnessConfig):
         config_dict = {}
 
         using_pytorch = runtime_flags['trtllm_backend'] == 'pytorch'
+
+        # backend and parallelism
+        config_dict['backend'] = runtime_flags['trtllm_backend']
+        config_dict['tensor_parallel_size'] = build_flags['tensor_parallelism']
+        config_dict['pipeline_parallel_size'] = build_flags['pipeline_parallelism']
+
+        # capacity config
+        config_dict['max_batch_size'] = runtime_flags['max_batch_size']
+        config_dict['max_num_tokens'] = runtime_flags['max_num_tokens']
+        config_dict['max_seq_len'] = build_flags['max_seq_len']
+
+        # pytorch-specific defaults (print_iter_log, enable_iter_perf_stats, etc.)
         if using_pytorch:
             config_dict |= {**cls.DEFAULT_EXTRA_CONFIG}
 
@@ -488,44 +499,53 @@ class TrtllmExtraYAMLConfig(TrtllmHarnessConfig):
             },
 
             'kv_cache_config': {
+                'dtype': checkpoint_flags['kv_cache_dtype'],
                 'free_gpu_memory_fraction': runtime_flags['kvcache_free_gpu_mem_frac'],
                 'enable_block_reuse': False,
-                'dtype': checkpoint_flags['kv_cache_dtype'],
             },
-
-            'enable_attention_dp': build_flags['enable_attention_dp'],
         }
 
+        # num_postprocess_workers (optional)
+        if runtime_flags.get('num_postprocess_workers') is not None:
+            config_dict['num_postprocess_workers'] = runtime_flags['num_postprocess_workers']
+
+        config_dict['enable_attention_dp'] = build_flags['enable_attention_dp']
+
         if using_pytorch:
-            config_dict |= {
-                'torch_compile_enabled': build_flags['torch_compile_enabled'],
-                'moe_config': {
-                    'backend': runtime_flags['moe_backend'],
-                },
+            # torch_compile_config dict takes precedence over torch_compile_enabled bool
+            if build_flags.get('torch_compile_config') is not None:
+                config_dict['torch_compile_config'] = build_flags['torch_compile_config']
+            elif build_flags.get('torch_compile_enabled') is not None:
+                config_dict['torch_compile_enabled'] = build_flags['torch_compile_enabled']
+
+            config_dict['moe_config'] = {
+                'backend': runtime_flags['moe_backend'],
             }
 
-            if runtime_flags['use_cuda_graphs']:
-                assert runtime_flags['cuda_graph_batch_sizes'] is not None, \
-                    logging.error(f"CUDA graphs enabled but no cuda_graph_batch_sizes provided. ")
-
-                config_dict |= {
-                    'cuda_graph_config': {
-                        'enable_padding': runtime_flags['cuda_graph_padding_enabled'],
-                        'batch_sizes': runtime_flags['cuda_graph_batch_sizes'],
-                    }
+            # emit cuda_graph_config whenever batch_sizes are explicitly set
+            if runtime_flags.get('cuda_graph_batch_sizes') is not None:
+                config_dict['cuda_graph_config'] = {
+                    'enable_padding': runtime_flags['cuda_graph_padding_enabled'],
+                    'batch_sizes': runtime_flags['cuda_graph_batch_sizes'],
                 }
 
-            if config_dict['enable_attention_dp'] and runtime_flags['adp_balancing_enable']:
-                config_dict |= {
-                    'attention_dp_config': {
-                        'enable_balance': runtime_flags['adp_balancing_enable'],
-                        'batching_wait_iters': runtime_flags['adp_balancing_batching_wait_iters'],
-                        'timeout_iters': runtime_flags['adp_balancing_timeout_iters'],
-                    }
+            config_dict['cache_transceiver_config'] = runtime_flags.get(
+                'cache_transceiver_config', {'backend': 'DEFAULT'}
+            )
+
+            if config_dict.get('enable_attention_dp') and runtime_flags['adp_balancing_enable']:
+                config_dict['attention_dp_config'] = {
+                    'enable_balance': runtime_flags['adp_balancing_enable'],
+                    'batching_wait_iters': runtime_flags['adp_balancing_batching_wait_iters'],
+                    'timeout_iters': runtime_flags['adp_balancing_timeout_iters'],
                 }
 
         if not using_pytorch and runtime_flags['use_cuda_graphs']:
             raise NotImplementedError("CUDA Graphs are not supported in TRT/C++ backend yet.")
+
+        # sampler_type (optional)
+        if runtime_flags.get('sampler_type') is not None:
+            config_dict['sampler_type'] = runtime_flags['sampler_type']
 
         # create file content string
         yaml_content = get_yaml_string(config_dict)

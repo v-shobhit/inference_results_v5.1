@@ -16,7 +16,7 @@ root=$(git rev-parse --show-toplevel)/closed/NVIDIA
 mkdir -p $root/build/
 rm -rf $root/build/inference && rm -rf $root/build/mitten
 
-git clone https://github.com/mlcommons/inference.git $root/build/inference
+git clone https://github.com/mlcommons/inference.git $root/build/inference -b v5.1.1
 git clone https://github.com/NVIDIA/mitten.git $root/build/mitten
 
 srun --ntasks=1 --nodes=1 \
